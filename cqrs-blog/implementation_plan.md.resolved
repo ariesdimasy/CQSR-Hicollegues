@@ -1,0 +1,89 @@
+# CQRS Blog Backend — Implementation Plan
+
+Build a CQRS-pattern blog backend with User, Post, Role modules. Relations: 1 Role → many Users, 1 User → many Posts.
+
+## Project Structure
+
+```
+cqrs-blog/
+├── cmd/main.go
+├── .env
+├── go.mod
+├── internal/
+│   ├── domain/
+│   │   ├── user/user.go          # Entity + Request/Response DTOs
+│   │   ├── post/post.go
+│   │   └── role/role.go
+│   ├── cqrs/
+│   │   ├── commands/             # Command definitions
+│   │   │   ├── user_commands.go
+│   │   │   ├── post_commands.go
+│   │   │   └── role_commands.go
+│   │   ├── queries/              # Query definitions
+│   │   │   ├── user_queries.go
+│   │   │   ├── post_queries.go
+│   │   │   └── role_queries.go
+│   │   ├── handlers/             # Command & Query handlers
+│   │   │   ├── user_command_handler.go
+│   │   │   ├── user_query_handler.go
+│   │   │   ├── post_command_handler.go
+│   │   │   ├── post_query_handler.go
+│   │   │   ├── role_command_handler.go
+│   │   │   └── role_query_handler.go
+│   │   └── bus/                  # Command & Query bus
+│   │       ├── command_bus.go
+│   │       └── query_bus.go
+│   ├── infrastructure/
+│   │   └── database/database.go  # GORM + PostgreSQL
+│   └── interfaces/
+│       └── api/
+│           ├── controllers/
+│           │   ├── user_controller.go
+│           │   ├── post_controller.go
+│           │   └── role_controller.go
+│           ├── middlewares/logger.go
+│           └── routes/routes.go
+```
+
+## Key Design Decisions
+
+**Command/Query Separation**: Each operation is a distinct struct. Commands mutate state, Queries read state. Both are dispatched through a Bus.
+
+**Bus Pattern**: `CommandBus` and `QueryBus` act as mediators — controllers dispatch commands/queries, handlers process them. This decouples the API layer from business logic.
+
+```
+Controller → CommandBus.Dispatch(CreateUserCommand) → UserCommandHandler.HandleCreate()
+Controller → QueryBus.Dispatch(GetUserByIDQuery)    → UserQueryHandler.HandleGetByID()
+```
+
+**No circular imports**: Domain models use only foreign key IDs (no cross-package struct references).
+
+## Proposed Changes
+
+### [NEW] Domain Models
+- [user.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/domain/user/user.go) — User entity (ID, Name, Email, Password, RoleID) + DTOs
+- [post.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/domain/post/post.go) — Post entity (ID, Title, Content, UserID) + DTOs
+- [role.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/domain/role/role.go) — Role entity (ID, Name) + DTOs
+
+### [NEW] CQRS Commands & Queries
+- Commands: [CreateUser](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/domain/user/user.go#20-26), [UpdateUser](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/domain/user/user.go#27-32), `DeleteUser` (same for Post, Role)
+- Queries: `GetUserByID`, `GetAllUsers` (same for Post + `GetPostsByUserID`, Role)
+
+### [NEW] CQRS Handlers
+- Command handlers: validate → persist → return response
+- Query handlers: read from DB → return response
+
+### [NEW] CQRS Bus
+- `CommandBus`: registers & dispatches commands to handlers
+- `QueryBus`: registers & dispatches queries to handlers
+
+### [NEW] Infrastructure & API
+- [database.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/infrastructure/database/database.go): GORM + PostgreSQL + auto-migration
+- Controllers: thin layer dispatching commands/queries via bus
+- [routes.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/interfaces/api/routes/routes.go): RESTful routes under `/api/v1`
+- [logger.go](file:///I:/CQSR%20Hicollegues/event-driven-blog/internal/interfaces/api/middlewares/logger.go): request logging middleware
+
+## Verification Plan
+
+### Automated Tests
+- `go build ./...` to verify compilation
