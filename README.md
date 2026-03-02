@@ -18,4 +18,14 @@ Youtube
   
   Badan Sistem Informasi UII
 
+- [CQRS proof-of-concept in golang using Watermill - YouTube](https://www.youtube.com/watch?v=-KVHTWFwbGQ&t=118s)
+  
+  build CQRS pattern golang using watermill
+
+   
+
+
+
+
+
 
