@@ -33,7 +33,7 @@ func ToRoleResponse(r *Role) *RoleResponse {
 }
 
 func ToRoleResponses(roles []Role) []RoleResponse {
-	var responses []RoleResponse
+	responses := make([]RoleResponse, 0, len(roles))
 	for _, r := range roles {
 		responses = append(responses, *ToRoleResponse(&r))
 	}

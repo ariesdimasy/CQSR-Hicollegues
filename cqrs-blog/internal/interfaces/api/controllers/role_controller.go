@@ -32,7 +32,7 @@ func (c *RoleController) Create(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleCreate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -50,7 +50,7 @@ func (c *RoleController) GetByID(ctx *gin.Context) {
 	query := queries.GetRoleByIDQuery{ID: uint(id)}
 	response, err := c.queryHandler.HandleGetByID(query)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -86,7 +86,7 @@ func (c *RoleController) Update(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleUpdate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -103,7 +103,7 @@ func (c *RoleController) Delete(ctx *gin.Context) {
 
 	cmd := commands.DeleteRoleCommand{ID: uint(id)}
 	if err := c.commandHandler.HandleDelete(cmd); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 

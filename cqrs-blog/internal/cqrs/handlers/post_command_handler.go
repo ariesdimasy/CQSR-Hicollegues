@@ -31,9 +31,11 @@ func (h *PostCommandHandler) HandleCreate(cmd commands.CreatePostCommand) (*post
 	}
 
 	// Verify user exists
-	var userExists bool
-	h.db.Table("users").Select("count(*) > 0").Where("id = ?", cmd.UserID).Find(&userExists)
-	if !userExists {
+	var count int64
+	if err := h.db.Table("users").Where("id = ? AND deleted_at IS NULL", cmd.UserID).Count(&count).Error; err != nil {
+		return nil, fmt.Errorf("failed to verify user: %w", err)
+	}
+	if count == 0 {
 		return nil, errors.New("user not found")
 	}
 
@@ -52,6 +54,10 @@ func (h *PostCommandHandler) HandleCreate(cmd commands.CreatePostCommand) (*post
 
 // HandleUpdate handles the UpdatePostCommand
 func (h *PostCommandHandler) HandleUpdate(cmd commands.UpdatePostCommand) (*post.PostResponse, error) {
+	if err := h.validate.Struct(cmd); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
 	var p post.Post
 	if err := h.db.First(&p, cmd.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

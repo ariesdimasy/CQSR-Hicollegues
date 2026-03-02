@@ -6,6 +6,7 @@ import (
 	"cqrs-blog/internal/cqrs/queries"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,7 +33,7 @@ func (c *UserController) Create(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleCreate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -50,7 +51,7 @@ func (c *UserController) GetByID(ctx *gin.Context) {
 	query := queries.GetUserByIDQuery{ID: uint(id)}
 	response, err := c.queryHandler.HandleGetByID(query)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -86,7 +87,7 @@ func (c *UserController) Update(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleUpdate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -103,9 +104,25 @@ func (c *UserController) Delete(ctx *gin.Context) {
 
 	cmd := commands.DeleteUserCommand{ID: uint(id)}
 	if err := c.commandHandler.HandleDelete(cmd); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusNoContent, nil)
+}
+
+// classifyError maps error messages to appropriate HTTP status codes
+func classifyError(err error) int {
+	msg := err.Error()
+
+	switch {
+	case strings.Contains(msg, "not found"):
+		return http.StatusNotFound
+	case strings.Contains(msg, "validation failed"):
+		return http.StatusBadRequest
+	case strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique"):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
 }

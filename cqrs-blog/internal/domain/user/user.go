@@ -12,7 +12,7 @@ type User struct {
 	Name      string         `gorm:"size:100;not null" json:"name" validate:"required,min=3,max=100"`
 	Email     string         `gorm:"size:100;uniqueIndex;not null" json:"email" validate:"required,email"`
 	Password  string         `gorm:"size:255;not null" json:"-" validate:"required,min=6"`
-	RoleID    uint           `gorm:"not null" json:"role_id" validate:"required"`
+	RoleID    uint           `gorm:"not null;constraint:OnDelete:RESTRICT" json:"role_id" validate:"required"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
@@ -40,7 +40,7 @@ func ToUserResponse(u *User) *UserResponse {
 }
 
 func ToUserResponses(users []User) []UserResponse {
-	var responses []UserResponse
+	responses := make([]UserResponse, 0, len(users))
 	for _, u := range users {
 		responses = append(responses, *ToUserResponse(&u))
 	}

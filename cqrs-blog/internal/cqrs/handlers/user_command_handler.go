@@ -53,6 +53,10 @@ func (h *UserCommandHandler) HandleCreate(cmd commands.CreateUserCommand) (*user
 
 // HandleUpdate handles the UpdateUserCommand
 func (h *UserCommandHandler) HandleUpdate(cmd commands.UpdateUserCommand) (*user.UserResponse, error) {
+	if err := h.validate.Struct(cmd); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
 	var u user.User
 	if err := h.db.First(&u, cmd.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

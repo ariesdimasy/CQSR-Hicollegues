@@ -43,6 +43,10 @@ func (h *RoleCommandHandler) HandleCreate(cmd commands.CreateRoleCommand) (*role
 
 // HandleUpdate handles the UpdateRoleCommand
 func (h *RoleCommandHandler) HandleUpdate(cmd commands.UpdateRoleCommand) (*role.RoleResponse, error) {
+	if err := h.validate.Struct(cmd); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
 	var r role.Role
 	if err := h.db.First(&r, cmd.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

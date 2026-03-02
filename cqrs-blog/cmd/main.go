@@ -6,6 +6,7 @@ import (
 	"cqrs-blog/internal/interfaces/api/controllers"
 	"cqrs-blog/internal/interfaces/api/routes"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -19,10 +20,15 @@ func main() {
 	}
 
 	// Initialize database
-	db := database.NewPostgresConnection()
+	db, err := database.NewPostgresConnection()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Auto-migrate models
-	database.AutoMigrate(db)
+	if err := database.AutoMigrate(db); err != nil {
+		log.Fatal(err)
+	}
 
 	// Initialize validator
 	validate := validator.New()
@@ -58,8 +64,12 @@ func main() {
 	router.SetupRoutes(engine)
 
 	// Start server
-	log.Println("Server starting on :8080")
-	if err := engine.Run(":8080"); err != nil {
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server starting on :%s\n", port)
+	if err := engine.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }

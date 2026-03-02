@@ -32,7 +32,7 @@ func (c *PostController) Create(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleCreate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -50,7 +50,7 @@ func (c *PostController) GetByID(ctx *gin.Context) {
 	query := queries.GetPostByIDQuery{ID: uint(id)}
 	response, err := c.queryHandler.HandleGetByID(query)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -104,7 +104,7 @@ func (c *PostController) Update(ctx *gin.Context) {
 
 	response, err := c.commandHandler.HandleUpdate(cmd)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -121,7 +121,7 @@ func (c *PostController) Delete(ctx *gin.Context) {
 
 	cmd := commands.DeletePostCommand{ID: uint(id)}
 	if err := c.commandHandler.HandleDelete(cmd); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(classifyError(err), gin.H{"error": err.Error()})
 		return
 	}
 
