@@ -3,6 +3,7 @@ package handlers
 import (
 	"cqrs-blog/internal/cqrs/commands"
 	"cqrs-blog/internal/domain/role"
+	"cqrs-blog/internal/infrastructure/sync"
 	"errors"
 	"fmt"
 
@@ -10,17 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// RoleCommandHandler handles all role-related commands
+// RoleCommandHandler handles all role-related commands (Write → PostgreSQL)
 type RoleCommandHandler struct {
-	db       *gorm.DB
-	validate *validator.Validate
+	db          *gorm.DB
+	validate    *validator.Validate
+	syncService *sync.SyncService
 }
 
 // NewRoleCommandHandler creates a new RoleCommandHandler
-func NewRoleCommandHandler(db *gorm.DB, validate *validator.Validate) *RoleCommandHandler {
+func NewRoleCommandHandler(db *gorm.DB, validate *validator.Validate, syncService *sync.SyncService) *RoleCommandHandler {
 	return &RoleCommandHandler{
-		db:       db,
-		validate: validate,
+		db:          db,
+		validate:    validate,
+		syncService: syncService,
 	}
 }
 
@@ -36,6 +39,12 @@ func (h *RoleCommandHandler) HandleCreate(cmd commands.CreateRoleCommand) (*role
 
 	if err := h.db.Create(newRole).Error; err != nil {
 		return nil, fmt.Errorf("failed to create role: %w", err)
+	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncRole(newRole); err != nil {
+		// Log but don't fail the request — write succeeded
+		fmt.Printf("WARNING: failed to sync role to read DB: %v\n", err)
 	}
 
 	return role.ToRoleResponse(newRole), nil
@@ -63,6 +72,11 @@ func (h *RoleCommandHandler) HandleUpdate(cmd commands.UpdateRoleCommand) (*role
 		return nil, fmt.Errorf("failed to update role: %w", err)
 	}
 
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncRole(&r); err != nil {
+		fmt.Printf("WARNING: failed to sync role to read DB: %v\n", err)
+	}
+
 	return role.ToRoleResponse(&r), nil
 }
 
@@ -75,5 +89,11 @@ func (h *RoleCommandHandler) HandleDelete(cmd commands.DeleteRoleCommand) error 
 	if result.RowsAffected == 0 {
 		return errors.New("role not found")
 	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.DeleteRole(cmd.ID); err != nil {
+		fmt.Printf("WARNING: failed to delete role from read DB: %v\n", err)
+	}
+
 	return nil
 }

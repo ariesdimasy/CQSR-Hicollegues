@@ -3,6 +3,7 @@ package main
 import (
 	"cqrs-blog/internal/cqrs/handlers"
 	"cqrs-blog/internal/infrastructure/database"
+	"cqrs-blog/internal/infrastructure/sync"
 	"cqrs-blog/internal/interfaces/api/controllers"
 	"cqrs-blog/internal/interfaces/api/routes"
 	"log"
@@ -19,35 +20,48 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	// Initialize database
-	db, err := database.NewPostgresConnection()
+	// ==========================================
+	// Initialize Write Database (PostgreSQL)
+	// ==========================================
+	pgDB, err := database.NewPostgresConnection()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("PostgreSQL connection failed:", err)
 	}
 
-	// Auto-migrate models
-	if err := database.AutoMigrate(db); err != nil {
-		log.Fatal(err)
+	// Auto-migrate models (PostgreSQL only)
+	if err := database.AutoMigrate(pgDB); err != nil {
+		log.Fatal("PostgreSQL migration failed:", err)
 	}
+
+	// ==========================================
+	// Initialize Read Database (MongoDB)
+	// ==========================================
+	mongoDB, err := database.NewMongoConnection()
+	if err != nil {
+		log.Fatal("MongoDB connection failed:", err)
+	}
+
+	// ==========================================
+	// Initialize Sync Service (PG → MongoDB)
+	// ==========================================
+	syncService := sync.NewSyncService(mongoDB)
 
 	// Initialize validator
 	validate := validator.New()
 
 	// ==========================================
-	// CQRS: Initialize Command & Query Handlers
+	// CQRS: Initialize Command Handlers (→ PostgreSQL)
 	// ==========================================
+	userCommandHandler := handlers.NewUserCommandHandler(pgDB, validate, syncService)
+	postCommandHandler := handlers.NewPostCommandHandler(pgDB, validate, syncService)
+	roleCommandHandler := handlers.NewRoleCommandHandler(pgDB, validate, syncService)
 
-	// User handlers
-	userCommandHandler := handlers.NewUserCommandHandler(db, validate)
-	userQueryHandler := handlers.NewUserQueryHandler(db)
-
-	// Post handlers
-	postCommandHandler := handlers.NewPostCommandHandler(db, validate)
-	postQueryHandler := handlers.NewPostQueryHandler(db)
-
-	// Role handlers
-	roleCommandHandler := handlers.NewRoleCommandHandler(db, validate)
-	roleQueryHandler := handlers.NewRoleQueryHandler(db)
+	// ==========================================
+	// CQRS: Initialize Query Handlers (→ MongoDB)
+	// ==========================================
+	userQueryHandler := handlers.NewUserQueryHandler(mongoDB)
+	postQueryHandler := handlers.NewPostQueryHandler(mongoDB)
+	roleQueryHandler := handlers.NewRoleQueryHandler(mongoDB)
 
 	// ==========================================
 	// Initialize Controllers (with CQRS handlers)
@@ -69,6 +83,7 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Server starting on :%s\n", port)
+	log.Println("Write DB: PostgreSQL | Read DB: MongoDB")
 	if err := engine.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}

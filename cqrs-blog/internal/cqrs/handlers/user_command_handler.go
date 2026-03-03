@@ -3,6 +3,7 @@ package handlers
 import (
 	"cqrs-blog/internal/cqrs/commands"
 	"cqrs-blog/internal/domain/user"
+	"cqrs-blog/internal/infrastructure/sync"
 	"errors"
 	"fmt"
 
@@ -11,17 +12,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserCommandHandler handles all user-related commands
+// UserCommandHandler handles all user-related commands (Write → PostgreSQL)
 type UserCommandHandler struct {
-	db       *gorm.DB
-	validate *validator.Validate
+	db          *gorm.DB
+	validate    *validator.Validate
+	syncService *sync.SyncService
 }
 
 // NewUserCommandHandler creates a new UserCommandHandler
-func NewUserCommandHandler(db *gorm.DB, validate *validator.Validate) *UserCommandHandler {
+func NewUserCommandHandler(db *gorm.DB, validate *validator.Validate, syncService *sync.SyncService) *UserCommandHandler {
 	return &UserCommandHandler{
-		db:       db,
-		validate: validate,
+		db:          db,
+		validate:    validate,
+		syncService: syncService,
 	}
 }
 
@@ -46,6 +49,11 @@ func (h *UserCommandHandler) HandleCreate(cmd commands.CreateUserCommand) (*user
 
 	if err := h.db.Create(newUser).Error; err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncUser(newUser); err != nil {
+		fmt.Printf("WARNING: failed to sync user to read DB: %v\n", err)
 	}
 
 	return user.ToUserResponse(newUser), nil
@@ -79,6 +87,11 @@ func (h *UserCommandHandler) HandleUpdate(cmd commands.UpdateUserCommand) (*user
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncUser(&u); err != nil {
+		fmt.Printf("WARNING: failed to sync user to read DB: %v\n", err)
+	}
+
 	return user.ToUserResponse(&u), nil
 }
 
@@ -91,5 +104,11 @@ func (h *UserCommandHandler) HandleDelete(cmd commands.DeleteUserCommand) error 
 	if result.RowsAffected == 0 {
 		return errors.New("user not found")
 	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.DeleteUser(cmd.ID); err != nil {
+		fmt.Printf("WARNING: failed to delete user from read DB: %v\n", err)
+	}
+
 	return nil
 }

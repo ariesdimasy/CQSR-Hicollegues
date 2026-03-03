@@ -1,0 +1,77 @@
+# Walkthrough: Dual Database CQRS Implementation
+
+## Overview
+
+Project `cqrs-blog` telah berhasil di-refactor dari single database (PostgreSQL) menjadi **dual database CQRS**:
+
+| Side | Database | Handlers |
+|------|----------|----------|
+| **Write (Command)** | PostgreSQL via GORM | [RoleCommandHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/role_command_handler.go#15-20), [UserCommandHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/user_command_handler.go#16-21), [PostCommandHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/post_command_handler.go#15-20) |
+| **Read (Query)** | MongoDB | [RoleQueryHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/role_query_handler.go#15-18), [UserQueryHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/user_query_handler.go#15-18), [PostQueryHandler](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/post_query_handler.go#15-18) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client["Client (API)"]
+
+    subgraph Commands["Command Side (Write)"]
+        CC["Command Controller"]
+        CH["Command Handler"]
+        PG[("PostgreSQL")]
+    end
+
+    subgraph Sync["Sync Layer"]
+        SS["SyncService"]
+    end
+
+    subgraph Queries["Query Side (Read)"]
+        QC["Query Controller"]
+        QH["Query Handler"]
+        MG[("MongoDB")]
+    end
+
+    Client -->|"POST/PUT/DELETE"| CC --> CH --> PG
+    CH --> SS -->|"Upsert/Delete"| MG
+    Client -->|"GET"| QC --> QH --> MG
+```
+
+## Files Changed
+
+### New Files (6)
+
+| File | Description |
+|------|-------------|
+| [role_read_model.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/domain/readmodel/role_read_model.go) | MongoDB read model for Role (`bson` tags) |
+| [user_read_model.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/domain/readmodel/user_read_model.go) | MongoDB read model for User (`bson` tags) |
+| [post_read_model.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/domain/readmodel/post_read_model.go) | MongoDB read model for Post (`bson` tags) |
+| [mongodb.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/infrastructure/database/mongodb.go) | MongoDB connection factory |
+| [sync_service.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/infrastructure/sync/sync_service.go) | Sync layer: upsert/delete data PG → MongoDB |
+
+### Modified Files (8)
+
+| File | Change |
+|------|--------|
+| [role_command_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/role_command_handler.go) | Added [SyncService](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/infrastructure/sync/sync_service.go#18-21) — syncs to MongoDB after PG writes |
+| [user_command_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/user_command_handler.go) | Added [SyncService](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/infrastructure/sync/sync_service.go#18-21) — syncs to MongoDB after PG writes |
+| [post_command_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/post_command_handler.go) | Added [SyncService](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/infrastructure/sync/sync_service.go#18-21) — syncs to MongoDB after PG writes |
+| [role_query_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/role_query_handler.go) | Reads from MongoDB instead of PostgreSQL |
+| [user_query_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/user_query_handler.go) | Reads from MongoDB instead of PostgreSQL |
+| [post_query_handler.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/internal/cqrs/handlers/post_query_handler.go) | Reads from MongoDB instead of PostgreSQL |
+| [main.go](file:///I:/CQSR%20Hicollegues/cqrs-blog/cmd/main.go) | Initializes both PG + MongoDB, wires sync service |
+| [.env](file:///I:/CQSR%20Hicollegues/cqrs-blog/.env) | Added `MONGO_URI` and `MONGO_DB_NAME` |
+
+## Verification Results
+
+| Check | Result |
+|-------|--------|
+| `go build ./...` | ✅ Passed (no errors) |
+| `go vet ./...` | ✅ Passed (no issues) |
+| `go mod tidy` | ✅ Dependencies resolved |
+
+## How to Run
+
+1. Pastikan **PostgreSQL** berjalan di `localhost:5432`
+2. Pastikan **MongoDB** berjalan di `localhost:27017`
+3. Jalankan: `go run cmd/main.go`
+4. Log output akan menampilkan: `Write DB: PostgreSQL | Read DB: MongoDB`

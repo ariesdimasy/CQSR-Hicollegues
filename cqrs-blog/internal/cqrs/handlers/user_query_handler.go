@@ -1,42 +1,62 @@
 package handlers
 
 import (
+	"context"
 	"cqrs-blog/internal/cqrs/queries"
+	"cqrs-blog/internal/domain/readmodel"
 	"cqrs-blog/internal/domain/user"
 	"errors"
 
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-// UserQueryHandler handles all user-related queries
+// UserQueryHandler handles all user-related queries (Read → MongoDB)
 type UserQueryHandler struct {
-	db *gorm.DB
+	mongoDB *mongo.Database
 }
 
 // NewUserQueryHandler creates a new UserQueryHandler
-func NewUserQueryHandler(db *gorm.DB) *UserQueryHandler {
-	return &UserQueryHandler{db: db}
+func NewUserQueryHandler(mongoDB *mongo.Database) *UserQueryHandler {
+	return &UserQueryHandler{mongoDB: mongoDB}
 }
 
 // HandleGetByID handles the GetUserByIDQuery
 func (h *UserQueryHandler) HandleGetByID(query queries.GetUserByIDQuery) (*user.UserResponse, error) {
-	var u user.User
-	if err := h.db.First(&u, query.ID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	collection := h.mongoDB.Collection("users")
+
+	var result readmodel.UserReadModel
+	filter := bson.M{"_id": query.ID}
+
+	err := collection.FindOne(context.Background(), filter).Decode(&result)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
 	}
 
-	return user.ToUserResponse(&u), nil
+	return result.ToUserResponse(), nil
 }
 
 // HandleGetAll handles the GetAllUsersQuery
 func (h *UserQueryHandler) HandleGetAll(query queries.GetAllUsersQuery) ([]user.UserResponse, error) {
-	var users []user.User
-	if err := h.db.Find(&users).Error; err != nil {
+	collection := h.mongoDB.Collection("users")
+
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var results []readmodel.UserReadModel
+	if err := cursor.All(context.Background(), &results); err != nil {
 		return nil, err
 	}
 
-	return user.ToUserResponses(users), nil
+	if results == nil {
+		return []user.UserResponse{}, nil
+	}
+
+	return readmodel.ToUserResponses(results), nil
 }

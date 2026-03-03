@@ -1,52 +1,85 @@
 package handlers
 
 import (
+	"context"
 	"cqrs-blog/internal/cqrs/queries"
 	"cqrs-blog/internal/domain/post"
+	"cqrs-blog/internal/domain/readmodel"
 	"errors"
 
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-// PostQueryHandler handles all post-related queries
+// PostQueryHandler handles all post-related queries (Read → MongoDB)
 type PostQueryHandler struct {
-	db *gorm.DB
+	mongoDB *mongo.Database
 }
 
 // NewPostQueryHandler creates a new PostQueryHandler
-func NewPostQueryHandler(db *gorm.DB) *PostQueryHandler {
-	return &PostQueryHandler{db: db}
+func NewPostQueryHandler(mongoDB *mongo.Database) *PostQueryHandler {
+	return &PostQueryHandler{mongoDB: mongoDB}
 }
 
 // HandleGetByID handles the GetPostByIDQuery
 func (h *PostQueryHandler) HandleGetByID(query queries.GetPostByIDQuery) (*post.PostResponse, error) {
-	var p post.Post
-	if err := h.db.First(&p, query.ID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	collection := h.mongoDB.Collection("posts")
+
+	var result readmodel.PostReadModel
+	filter := bson.M{"_id": query.ID}
+
+	err := collection.FindOne(context.Background(), filter).Decode(&result)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("post not found")
 		}
 		return nil, err
 	}
 
-	return post.ToPostResponse(&p), nil
+	return result.ToPostResponse(), nil
 }
 
 // HandleGetAll handles the GetAllPostsQuery
 func (h *PostQueryHandler) HandleGetAll(query queries.GetAllPostsQuery) ([]post.PostResponse, error) {
-	var posts []post.Post
-	if err := h.db.Find(&posts).Error; err != nil {
+	collection := h.mongoDB.Collection("posts")
+
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var results []readmodel.PostReadModel
+	if err := cursor.All(context.Background(), &results); err != nil {
 		return nil, err
 	}
 
-	return post.ToPostResponses(posts), nil
+	if results == nil {
+		return []post.PostResponse{}, nil
+	}
+
+	return readmodel.ToPostResponses(results), nil
 }
 
 // HandleGetByUserID handles the GetPostsByUserIDQuery
 func (h *PostQueryHandler) HandleGetByUserID(query queries.GetPostsByUserIDQuery) ([]post.PostResponse, error) {
-	var posts []post.Post
-	if err := h.db.Where("user_id = ?", query.UserID).Find(&posts).Error; err != nil {
+	collection := h.mongoDB.Collection("posts")
+
+	filter := bson.M{"user_id": query.UserID}
+	cursor, err := collection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var results []readmodel.PostReadModel
+	if err := cursor.All(context.Background(), &results); err != nil {
 		return nil, err
 	}
 
-	return post.ToPostResponses(posts), nil
+	if results == nil {
+		return []post.PostResponse{}, nil
+	}
+
+	return readmodel.ToPostResponses(results), nil
 }

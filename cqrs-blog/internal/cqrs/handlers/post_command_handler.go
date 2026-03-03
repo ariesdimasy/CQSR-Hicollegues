@@ -3,6 +3,7 @@ package handlers
 import (
 	"cqrs-blog/internal/cqrs/commands"
 	"cqrs-blog/internal/domain/post"
+	"cqrs-blog/internal/infrastructure/sync"
 	"errors"
 	"fmt"
 
@@ -10,17 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// PostCommandHandler handles all post-related commands
+// PostCommandHandler handles all post-related commands (Write → PostgreSQL)
 type PostCommandHandler struct {
-	db       *gorm.DB
-	validate *validator.Validate
+	db          *gorm.DB
+	validate    *validator.Validate
+	syncService *sync.SyncService
 }
 
 // NewPostCommandHandler creates a new PostCommandHandler
-func NewPostCommandHandler(db *gorm.DB, validate *validator.Validate) *PostCommandHandler {
+func NewPostCommandHandler(db *gorm.DB, validate *validator.Validate, syncService *sync.SyncService) *PostCommandHandler {
 	return &PostCommandHandler{
-		db:       db,
-		validate: validate,
+		db:          db,
+		validate:    validate,
+		syncService: syncService,
 	}
 }
 
@@ -47,6 +50,11 @@ func (h *PostCommandHandler) HandleCreate(cmd commands.CreatePostCommand) (*post
 
 	if err := h.db.Create(newPost).Error; err != nil {
 		return nil, fmt.Errorf("failed to create post: %w", err)
+	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncPost(newPost); err != nil {
+		fmt.Printf("WARNING: failed to sync post to read DB: %v\n", err)
 	}
 
 	return post.ToPostResponse(newPost), nil
@@ -77,6 +85,11 @@ func (h *PostCommandHandler) HandleUpdate(cmd commands.UpdatePostCommand) (*post
 		return nil, fmt.Errorf("failed to update post: %w", err)
 	}
 
+	// Sync to MongoDB (read side)
+	if err := h.syncService.SyncPost(&p); err != nil {
+		fmt.Printf("WARNING: failed to sync post to read DB: %v\n", err)
+	}
+
 	return post.ToPostResponse(&p), nil
 }
 
@@ -89,5 +102,11 @@ func (h *PostCommandHandler) HandleDelete(cmd commands.DeletePostCommand) error 
 	if result.RowsAffected == 0 {
 		return errors.New("post not found")
 	}
+
+	// Sync to MongoDB (read side)
+	if err := h.syncService.DeletePost(cmd.ID); err != nil {
+		fmt.Printf("WARNING: failed to delete post from read DB: %v\n", err)
+	}
+
 	return nil
 }
